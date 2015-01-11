@@ -18,6 +18,7 @@
 
 ;;;; Player Params
 (defparameter *player* nil)
+(defparameter *player-laser* nil)
 
 (defparameter +acceleration+ 0.1)
 (defparameter +turn-speed+ 3)
@@ -65,6 +66,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;; SHIP/ASTEROID TEMPLATES ;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defparameter *tmpl-player* '((0 -20) (-10 20) (0 10) (10 20)))
+(defparameter *tmpl-laser* '((0 10) (0 0)))
 (defparameter *tmpl-asteroid* '((0 -60) (40 -40) (60 0) (40 40) (0 60) 
 				(-40 40) (-60 0) (-40 -40)))
 
@@ -77,11 +79,14 @@
   (vy 0)
   (angle 0))
 
+
 (defstruct player-laser
   (x 0)
   (y 0)
   (vx 0)
-  (vy 0))
+  (vy 0)
+  (angle 0)
+  (time 0))
   
 
 (defstruct asteroid
@@ -91,6 +96,7 @@
   (vy 0)
   (angle 0)
   (rot 0)
+  (stage 1)
   (shape nil))
 
 
@@ -152,6 +158,25 @@
 ;;;;;;;;;;;;;;;;;;;;;;;; PHYSICS ;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+(defun ship-collide-asteroid ()
+  (let ((p *player*))
+    (loop for a in *asteroids*
+       do (ship-collide a p))))
+
+(defun ship-collide (a p)
+  (if (<= (sqrt (+ (square (- (asteroid-x a) (player-x p)))
+		   (square (- (asteroid-y a) (player-y p)))))
+	  50)
+      (format t "hit~%")))
+
+
+(defun laser-collide-asteroid (l)
+  (loop for a in *asteroids*
+     do (if (<= (sqrt (+ (square (- (asteroid-x a) (player-laser-x l)))
+			 (square (- (asteroid-y a) (player-laser-y l)))))
+		50)
+	    (progn (setf *asteroids* (remove a *asteroids*))
+		   (setf *player-laser* (remove l *player-laser*))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; PRIMITIVES ;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -223,14 +248,15 @@
 
 ;;;; CREATE-ASTEROID function
 
-(defun create-asteroid ()
+(defun create-asteroid (&optional (stage 1))
   (let ((asteroid (create-asteroid-shape)))
-    (push (make-asteroid :x (+ (random 700) 200)
-			 :y (+ (random 500) 200)
+    (push (make-asteroid :x (+ (random 700) 700)
+			 :y (+ (random 700) 700)
 			 :vx (- (random 2.0) 1.0)
 			 :vy (- (random 2.0) 1.0)
 			 :angle 0
 			 :rot (- (random 6.0) 3.0)
+			 :stage stage
 			 :shape asteroid) *asteroids*)))
 
 
@@ -259,10 +285,14 @@
 		 (setf asteroid nil)))))
     
 
+;;;; UPDATE-ASTERIODS function
+
 (defun update-asteroids ()
   (loop for a in *asteroids*
      do (update-asteroid-position a)))
 
+
+;;;; UPDATE-ASTEROID-POSITION function
 
 (defun update-asteroid-position (a)
   (setf (asteroid-angle a) (+ (asteroid-angle a) (asteroid-rot a)))
@@ -270,17 +300,17 @@
   (setf (asteroid-x a) (+ (asteroid-x a) (asteroid-vx a)))
   (setf (asteroid-y a) (+ (asteroid-y a) (asteroid-vy a)))
 
-  (if (< (asteroid-x a) -30)
-      (setf (asteroid-x a) *game-width*))
+  (if (< (asteroid-x a) -50)
+      (setf (asteroid-x a) (+ *game-width* 50)))
   
-  (if (> (asteroid-x a) (+ *game-width* 30))
-      (setf (asteroid-x a) -30))
+  (if (> (asteroid-x a) (+ *game-width* 50))
+      (setf (asteroid-x a) -50))
   
-  (if (< (asteroid-y a) -30)
-      (setf (asteroid-y a) *game-height*))
+  (if (< (asteroid-y a) -50)
+      (setf (asteroid-y a) (+ *game-height* 50)))
   
-  (if (> (asteroid-y a) (+ *game-height* 30))
-      (setf (asteroid-y a) -30)))
+  (if (> (asteroid-y a) (+ *game-height* 50))
+      (setf (asteroid-y a) -50)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;; PLAYER ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -310,6 +340,7 @@
     (draw-polygon ship 255 255 255)))
 
 
+
 ;;;; UPDATE-PLAYER function
 
 (defun update-player ()
@@ -319,13 +350,13 @@
     (setf (player-y p) (+ (player-y p) (player-vy p)))
 
     (if (< (player-x p) -10)
-	(setf (player-x p) *game-width*))
+	(setf (player-x p) (+ *game-width* 10)))
 
     (if (> (player-x p) (+ *game-width* 10))
 	(setf (player-x p) 0))
 
     (if (< (player-y p) -10)
-	(setf (player-y p) *game-height*))
+	(setf (player-y p) (+ *game-height* 10)))
 
     (if (> (player-y p) (+ *game-height* 10))
 	(setf (player-y p) 0))))
@@ -370,6 +401,57 @@
   (if (> (player-vy p) +max-speed+)
       (setf (player-vy p) +max-speed+)))
 
+
+;;;; FIRE-LASER function
+
+(defun fire-laser ()
+  (let* ((p *player*)
+	 (vec-x (sin (deg-to-rad (player-angle p))))
+	 (vec-y (cos (deg-to-rad (player-angle p))))
+	 (vx (* 8 vec-x))
+	 (vy (* 8 vec-y)))
+    (push (make-player-laser :x (round (player-x p)) :y (round (player-y p))
+			     :vx vx :vy vy
+			     :angle (rem (player-angle p) 360)
+			     :time 60) *player-laser*)))
+
+
+;;;; DRAW-LASER function
+
+(defun draw-laser ()
+  (loop for l in *player-laser*
+     do (draw-circle (round (player-laser-x l)) (round (player-laser-y l)) 1 255 255 0)))
+
+
+;;;; UPDATE-LASER function
+
+(defun update-laser ()
+  (loop for l in *player-laser*
+     do (update-laser-position l)))
+
+
+;;;; UPDATE-LASER-POSITION function
+
+(defun update-laser-position (l)
+  (setf (player-laser-time l) (decf (player-laser-time l)))
+
+  (if (<= (player-laser-time l) 0)
+      (setf *player-laser* (remove l *player-laser*))
+      (progn (setf (player-laser-x l) (+ (player-laser-x l) (player-laser-vx l)))
+	     (setf (player-laser-y l) (- (player-laser-y l) (player-laser-vy l)))
+	     (laser-collide-asteroid l)
+
+	     (if (< (player-laser-x l) -1)
+		 (setf (player-laser-x l) (+ *game-width* 1)))
+
+	     (if (> (player-laser-x l) (+ *game-width* 1))
+		 (setf (player-laser-x l) -1))
+
+	     (if (< (player-laser-y l) -1)
+		 (setf (player-laser-y l) (+ *game-height* 1)))
+
+	     (if (> (player-laser-y l) (+ *game-height* 1))
+		 (setf (player-laser-y l) -1)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; LEVEL ;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -431,11 +513,14 @@
   (unless (eql *pause* t)
     (update-player)
     (update-asteroids)
+    (ship-collide-asteroid)
+    (update-laser)
     )
 
   (display-level)
   (draw-player)
   (draw-asteroids)
+  (draw-laser)
   (draw-game-ui))
 
 
@@ -484,6 +569,7 @@
 (defun reset-game ()
   (create-player)
   (setf *asteroids* nil)
+  (setf *player-laser* nil)
   (setf *pause* nil))
 
 
@@ -569,7 +655,9 @@
       (:key-down-event (:key key)
 		       (case key
 			 (:sdl-key-a (if (= *game-state* 1)
-					 (create-asteroid)))
+					 (create-asteroid 1)))
+			 (:sdl-key-z (if (= *game-state* 1)
+					 (fire-laser)))
 			 (:sdl-key-p (if (= *game-state* 1)
 					 (pause-game)))
 			 (:sdl-key-q (if (= *game-state* 1)
