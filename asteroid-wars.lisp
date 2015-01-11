@@ -25,7 +25,7 @@
 
 
 ;;;; Asteroid Params
-
+(defparameter *asteroids* nil)
 
 ;;;; Enemy Params
 
@@ -64,15 +64,15 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;; SHIP/ASTEROID TEMPLATES ;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defparameter *tmpl-player* '((0 -20) (-10 20) (0 10) (10 20) (0 -20)))
+(defparameter *tmpl-player* '((0 -20) (-10 20) (0 10) (10 20)))
+(defparameter *tmpl-asteroid* '((0 -60) (40 -40) (60 0) (40 40) (0 60) 
+				(-40 40) (-60 0) (-40 -40)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; STRUCTS/CLASSES ;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defstruct player
   (x 0)
   (y 0)
-  (px 0)
-  (py 0)
   (vx 0)
   (vy 0)
   (angle 0))
@@ -90,7 +90,8 @@
   (vx 0)
   (vy 0)
   (angle 0)
-  (rot 0))
+  (rot 0)
+  (shape nil))
 
 
 
@@ -205,6 +206,11 @@
   (sdl:draw-polygon vertices :color (sdl:color :r r :g g :b b)))
 
 
+;;;; DRAW-POLYGON-FILLED function
+
+(defun draw-polygon-filled (vertices r g b)
+  (sdl:draw-filled-polygon vertices :color (sdl:color :r r :g g :b b)))
+
 ;;;; PLAY-SOUND function
 
 (defun play-sound (s)
@@ -214,6 +220,68 @@
 ;;;;;;;;;;;;;;;;;;;;;;;; ENEMY ;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;; ASTEROIDS ;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;; CREATE-ASTEROID function
+
+(defun create-asteroid ()
+  (let ((asteroid (create-asteroid-shape)))
+    (push (make-asteroid :x (+ (random 700) 200)
+			 :y (+ (random 500) 200)
+			 :vx (- (random 2.0) 1.0)
+			 :vy (- (random 2.0) 1.0)
+			 :angle 0
+			 :rot (- (random 6.0) 3.0)
+			 :shape asteroid) *asteroids*)))
+
+
+;;;; CREATE-ASTEROID-SHAPE function
+
+(defun create-asteroid-shape ()
+  (let* ((asteroid nil))
+    (dolist (s *tmpl-asteroid*) 
+      (push (list (+ (first s) (- (random 16) 8))
+		  (+ (second s ) (- (random 16) 8)))
+	    asteroid))
+    asteroid))
+
+
+;;;; DRAW-ASTEROIDS function
+
+(defun draw-asteroids ()
+  (let ((asteroid nil))
+    (loop for a in *asteroids*
+       do (progn (dolist (roid (asteroid-shape a))
+		   (push (rotate (first roid) (second roid)
+				 (asteroid-x a) (asteroid-y a)
+				 (asteroid-angle a)) asteroid))
+
+		 (draw-polygon asteroid 255 255 255)
+		 (setf asteroid nil)))))
+    
+
+(defun update-asteroids ()
+  (loop for a in *asteroids*
+     do (update-asteroid-position a)))
+
+
+(defun update-asteroid-position (a)
+  (setf (asteroid-angle a) (+ (asteroid-angle a) (asteroid-rot a)))
+
+  (setf (asteroid-x a) (+ (asteroid-x a) (asteroid-vx a)))
+  (setf (asteroid-y a) (+ (asteroid-y a) (asteroid-vy a)))
+
+  (if (< (asteroid-x a) -30)
+      (setf (asteroid-x a) *game-width*))
+  
+  (if (> (asteroid-x a) (+ *game-width* 30))
+      (setf (asteroid-x a) -30))
+  
+  (if (< (asteroid-y a) -30)
+      (setf (asteroid-y a) *game-height*))
+  
+  (if (> (asteroid-y a) (+ *game-height* 30))
+      (setf (asteroid-y a) -30)))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;; PLAYER ;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -362,10 +430,12 @@
   
   (unless (eql *pause* t)
     (update-player)
+    (update-asteroids)
     )
 
   (display-level)
   (draw-player)
+  (draw-asteroids)
   (draw-game-ui))
 
 
@@ -413,6 +483,7 @@
 
 (defun reset-game ()
   (create-player)
+  (setf *asteroids* nil)
   (setf *pause* nil))
 
 
@@ -497,6 +568,8 @@
 		   t)
       (:key-down-event (:key key)
 		       (case key
+			 (:sdl-key-a (if (= *game-state* 1)
+					 (create-asteroid)))
 			 (:sdl-key-p (if (= *game-state* 1)
 					 (pause-game)))
 			 (:sdl-key-q (if (= *game-state* 1)
