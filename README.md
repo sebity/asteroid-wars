@@ -16,5 +16,7 @@ To run this game place the files somewhere [Quicklisp](http://www.quicklisp.org/
 
 ## Controls
 Thrust       : `Up` arrows key.
+
 Rotate Left  : `Left` arrows key.
+
 Rotate Right : `Right` arrows key.
