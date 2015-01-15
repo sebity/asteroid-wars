@@ -15,10 +15,12 @@
 (defparameter *game-state* 0) ; 0:menu/intro, 1:in game, 2:game over
 
 (defparameter *pause* nil)
+(defparameter *game-tick* 0)
 
 ;;;; Player Params
 (defparameter *player* nil)
 (defparameter *player-laser* nil)
+(defparameter *thrust* nil)
 
 (defparameter +acceleration+ 0.1)
 (defparameter +turn-speed+ 3)
@@ -66,7 +68,8 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;; SHIP/ASTEROID TEMPLATES ;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defparameter *tmpl-player* '((0 -20) (-10 20) (0 10) (10 20)))
+(defparameter *tmpl-player* '((0 -20) (-12 20) (-5 15) (5 15) (12 20)))
+(defparameter *tmpl-player-flame* '((-5 13) (0 25) (5 13)))
 (defparameter *tmpl-laser* '((0 10) (0 0)))
 (defparameter *tmpl-asteroid-1* '((0 -60) (40 -40) (60 0) (40 40) (0 60)
 				  (-40 40) (-60 0) (-40 -40)))
@@ -260,8 +263,8 @@
   (let ((asteroid (create-asteroid-shape stage)))
     (push (make-asteroid :x x
 			 :y y
-			 :vx (- (random 2.0) 1.0)
-			 :vy (- (random 2.0) 1.0)
+			 :vx (* (- (random 2.0) 1.0) stage)
+			 :vy (* (- (random 2.0) 1.0) stage)
 			 :angle 0
 			 :rot (- (random 6.0) 3.0)
 			 :stage stage
@@ -351,12 +354,19 @@
 	 (x (player-x p))
 	 (y (player-y p))
 	 (angle (player-angle p))
-	 (ship nil))
+	 (ship nil)
+	 (flame nil))
 
     (dolist (s *tmpl-player*) 
       (push (rotate (first s) (second s) x y angle) ship))
 
-    (draw-polygon ship 255 255 255)))
+    (dolist (s *tmpl-player-flame*) 
+      (push (rotate (first s) (second s) x y angle) flame))
+
+    (draw-polygon ship 255 255 255)
+    
+    (if (and (eq *thrust* t) (zerop (mod *game-tick* 4)))
+	(draw-polygon flame 255 0 0))))
 
 
 
@@ -397,6 +407,7 @@
 	  ((equalp direction 'forward)
 	   (progn (setf (player-vx p) (+ (player-vx p) (* vec-x +acceleration+)))
 		  (setf (player-vy p) (- (player-vy p) (* vec-y +acceleration+)))
+		  (setf *thrust* t)
 		  (check-max-speed p)))
 		  
 		   
@@ -472,6 +483,7 @@
 	     (if (> (player-laser-y l) (+ *game-height* 1))
 		 (setf (player-laser-y l) -1)))))
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;; LEVEL ;;;;;;;;;;;;;;;;;;;;;;;;
 
 
@@ -489,6 +501,18 @@
   (if (eql *pause* t)
       (draw-text "Paused" 
 	     380 280 255 255 255 *ttf-font-large*)))
+
+
+;;;; UPDATE-GAME-TICK function
+
+(defun update-game-tick ()
+  (setf *game-tick* (incf *game-tick*)))
+
+
+;;;; NEW-WAVE function
+
+(defun new-wave ()
+  (setf *game-tick* 0))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;; SCREENS ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -530,6 +554,7 @@
 (defun state-in-play ()
   
   (unless (eql *pause* t)
+    (update-game-tick)
     (update-player)
     (update-asteroids)
     (ship-collide-asteroid)
@@ -589,7 +614,8 @@
   (create-player)
   (setf *asteroids* nil)
   (setf *player-laser* nil)
-  (setf *pause* nil))
+  (setf *pause* nil)
+  (setf *game-tick* 0))
 
 
 ;;;; INITIALIZE-GAME function
@@ -686,6 +712,7 @@
       (:key-up-event (:key key)
 		     (case key))
       (:idle ()
+	     (setf *thrust* nil)
 	     (when (sdl:get-key-state :sdl-key-left) (player-move 'left))
 	     (when (sdl:get-key-state :sdl-key-right) (player-move 'right))
 	     (when (sdl:get-key-state :sdl-key-up) (player-move 'forward))
