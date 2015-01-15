@@ -27,6 +27,7 @@
 
 ;;;; Asteroid Params
 (defparameter *asteroids* nil)
+(defparameter *asteroid-field* 60)
 
 ;;;; Enemy Params
 
@@ -67,8 +68,12 @@
 
 (defparameter *tmpl-player* '((0 -20) (-10 20) (0 10) (10 20)))
 (defparameter *tmpl-laser* '((0 10) (0 0)))
-(defparameter *tmpl-asteroid* '((0 -60) (40 -40) (60 0) (40 40) (0 60) 
-				(-40 40) (-60 0) (-40 -40)))
+(defparameter *tmpl-asteroid-1* '((0 -60) (40 -40) (60 0) (40 40) (0 60)
+				  (-40 40) (-60 0) (-40 -40)))
+(defparameter *tmpl-asteroid-2* '((0 -30) (20 -30) (30 0) (20 20) (0 30)
+				  (-20 20) (-30 0) (-20 -20)))
+(defparameter *tmpl-asteroid-3* '((0 -15) (10 -15) (15 0) (10 10) (0 15)
+				  (-10 10) (-15 0) (-10 -10)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; STRUCTS/CLASSES ;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -166,7 +171,7 @@
 (defun ship-collide (a p)
   (if (<= (sqrt (+ (square (- (asteroid-x a) (player-x p)))
 		   (square (- (asteroid-y a) (player-y p)))))
-	  50)
+	  (asteroid-field-size (asteroid-stage a)))
       (format t "hit~%")))
 
 
@@ -174,8 +179,11 @@
   (loop for a in *asteroids*
      do (if (<= (sqrt (+ (square (- (asteroid-x a) (player-laser-x l)))
 			 (square (- (asteroid-y a) (player-laser-y l)))))
-		50)
-	    (progn (setf *asteroids* (remove a *asteroids*))
+		(asteroid-field-size (asteroid-stage a)))
+	    (progn (if (< (asteroid-stage a) 3)
+		       (progn (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a))
+			      (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a))))
+		   (setf *asteroids* (remove a *asteroids*))
 		   (setf *player-laser* (remove l *player-laser*))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; PRIMITIVES ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -248,10 +256,10 @@
 
 ;;;; CREATE-ASTEROID function
 
-(defun create-asteroid (&optional (stage 1))
-  (let ((asteroid (create-asteroid-shape)))
-    (push (make-asteroid :x (+ (random 700) 700)
-			 :y (+ (random 700) 700)
+(defun create-asteroid (&optional (stage 1) (x (+ (random 700) 700)) (y (+ (random 700) 700)))
+  (let ((asteroid (create-asteroid-shape stage)))
+    (push (make-asteroid :x x
+			 :y y
 			 :vx (- (random 2.0) 1.0)
 			 :vy (- (random 2.0) 1.0)
 			 :angle 0
@@ -262,13 +270,21 @@
 
 ;;;; CREATE-ASTEROID-SHAPE function
 
-(defun create-asteroid-shape ()
-  (let* ((asteroid nil))
-    (dolist (s *tmpl-asteroid*) 
+(defun create-asteroid-shape (stage)
+  (let* ((asteroid nil)
+	 (tmpl (cond ((= stage 2) *tmpl-asteroid-2*)
+		     ((= stage 3) *tmpl-asteroid-3*)
+		     (t *tmpl-asteroid-1*))))
+    (dolist (s tmpl)
       (push (list (+ (first s) (- (random 16) 8))
 		  (+ (second s ) (- (random 16) 8)))
 	    asteroid))
     asteroid))
+
+
+;;;; ASTEROID-FIELD-SIZE function
+(defun asteroid-field-size (stage)
+  (ash *asteroid-field* (- 1 stage)))
 
 
 ;;;; DRAW-ASTEROIDS function
@@ -295,22 +311,25 @@
 ;;;; UPDATE-ASTEROID-POSITION function
 
 (defun update-asteroid-position (a)
-  (setf (asteroid-angle a) (+ (asteroid-angle a) (asteroid-rot a)))
+  (let ((dx (asteroid-field-size (asteroid-stage a)))
+	(dy (asteroid-field-size (asteroid-stage a))))
 
-  (setf (asteroid-x a) (+ (asteroid-x a) (asteroid-vx a)))
-  (setf (asteroid-y a) (+ (asteroid-y a) (asteroid-vy a)))
+    (setf (asteroid-angle a) (+ (asteroid-angle a) (asteroid-rot a)))
 
-  (if (< (asteroid-x a) -50)
-      (setf (asteroid-x a) (+ *game-width* 50)))
-  
-  (if (> (asteroid-x a) (+ *game-width* 50))
-      (setf (asteroid-x a) -50))
-  
-  (if (< (asteroid-y a) -50)
-      (setf (asteroid-y a) (+ *game-height* 50)))
-  
-  (if (> (asteroid-y a) (+ *game-height* 50))
-      (setf (asteroid-y a) -50)))
+    (setf (asteroid-x a) (+ (asteroid-x a) (asteroid-vx a)))
+    (setf (asteroid-y a) (+ (asteroid-y a) (asteroid-vy a)))
+
+    (if (< (asteroid-x a) (- dx))
+	(setf (asteroid-x a) (+ *game-width* dx)))
+
+    (if (> (asteroid-x a) (+ *game-width* dx))
+	(setf (asteroid-x a) (- dx)))
+
+    (if (< (asteroid-y a) (- dy))
+	(setf (asteroid-y a) (+ *game-height* dy)))
+
+    (if (> (asteroid-y a) (+ *game-height* dy))
+	(setf (asteroid-y a) (- dy)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;; PLAYER ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -413,7 +432,7 @@
     (push (make-player-laser :x (round (player-x p)) :y (round (player-y p))
 			     :vx vx :vy vy
 			     :angle (rem (player-angle p) 360)
-			     :time 60) *player-laser*)))
+			     :time 75) *player-laser*)))
 
 
 ;;;; DRAW-LASER function
