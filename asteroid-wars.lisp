@@ -16,23 +16,28 @@
 
 (defparameter *pause* nil)
 (defparameter *game-tick* 0)
+(defparameter *wave* 1)
 
 ;;;; Player Params
 (defparameter *player* nil)
 (defparameter *player-laser* nil)
+(defparameter *player-lives* 0) ; default 3
+(defparameter *player-shield* nil)
+(defparameter *player-shield-timer* 0)
 (defparameter *thrust* nil)
 
 (defparameter +acceleration+ 0.1)
 (defparameter +turn-speed+ 3)
 (defparameter +max-speed+ 5)
 
-
 ;;;; Asteroid Params
+(defparameter *asteroid-count* 0) ; default (11 + wave) large per wave
 (defparameter *asteroids* nil)
-(defparameter *asteroid-field* 60)
+(defparameter *asteroid-field* 65)
 
 ;;;; Enemy Params
-
+(defparameter *enemy* nil)
+(defparameter *enemy-laser* nil)
 
 ;;;; Sound Params
 (defparameter *mixer-opened* nil)
@@ -40,7 +45,7 @@
 (defparameter *soundfx* nil)
 
 ;;;; GFX Params
-;(defparameter *gfx-snake* (merge-pathnames "logo.png" *gfx-root*))
+;(defparameter *gfx-bg* (merge-pathnames "gfx-bg.jpg" *gfx-root*))
 
 ;;;; Font Params
 (defparameter *terminus-ttf-12* 
@@ -70,13 +75,15 @@
 
 (defparameter *tmpl-player* '((0 -20) (-12 20) (-5 15) (5 15) (12 20)))
 (defparameter *tmpl-player-flame* '((-5 13) (0 25) (5 13)))
-(defparameter *tmpl-laser* '((0 10) (0 0)))
+
 (defparameter *tmpl-asteroid-1* '((0 -60) (40 -40) (60 0) (40 40) (0 60)
 				  (-40 40) (-60 0) (-40 -40)))
 (defparameter *tmpl-asteroid-2* '((0 -30) (20 -30) (30 0) (20 20) (0 30)
 				  (-20 20) (-30 0) (-20 -20)))
 (defparameter *tmpl-asteroid-3* '((0 -15) (10 -15) (15 0) (10 10) (0 15)
 				  (-10 10) (-15 0) (-10 -10)))
+
+;(defparameter *tmpl-large-ship* '(()))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; STRUCTS/CLASSES ;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -165,28 +172,33 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;; PHYSICS ;;;;;;;;;;;;;;;;;;;;;;;;
 
+;;;; SHIP-COLLIDE-ASTEROID function
 
 (defun ship-collide-asteroid ()
   (let ((p *player*))
     (loop for a in *asteroids*
        do (ship-collide a p))))
 
+
+;;;; SHIP-COLLIDE function
+
 (defun ship-collide (a p)
   (if (<= (sqrt (+ (square (- (asteroid-x a) (player-x p)))
 		   (square (- (asteroid-y a) (player-y p)))))
-	  (asteroid-field-size (asteroid-stage a)))
-      (format t "hit~%")))
+	  (+ (asteroid-field-size (asteroid-stage a)) 10))
+      (progn (split-asteroid a)
+	     (unless (eq *player-shield* t)
+	       (player-destroyed)))))
 
+
+;;;; LASER-COLLIDE-ASTEROID function
 
 (defun laser-collide-asteroid (l)
   (loop for a in *asteroids*
      do (if (<= (sqrt (+ (square (- (asteroid-x a) (player-laser-x l)))
 			 (square (- (asteroid-y a) (player-laser-y l)))))
 		(asteroid-field-size (asteroid-stage a)))
-	    (progn (if (< (asteroid-stage a) 3)
-		       (progn (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a))
-			      (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a))))
-		   (setf *asteroids* (remove a *asteroids*))
+	    (progn (split-asteroid a)
 		   (setf *player-laser* (remove l *player-laser*))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; PRIMITIVES ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -259,7 +271,7 @@
 
 ;;;; CREATE-ASTEROID function
 
-(defun create-asteroid (&optional (stage 1) (x (+ (random 700) 700)) (y (+ (random 700) 700)))
+(defun create-asteroid (&optional (stage 1) (x (+ (random 1020) 1)) (y (+ (random 700) 700)))
   (let ((asteroid (create-asteroid-shape stage)))
     (push (make-asteroid :x x
 			 :y y
@@ -283,6 +295,15 @@
 		  (+ (second s ) (- (random 16) 8)))
 	    asteroid))
     asteroid))
+
+
+;;;; SPLIT-ASTEROID function
+
+(defun split-asteroid (a)
+  (if (< (asteroid-stage a) 3)
+      (progn (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a))
+	     (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a))))
+  (setf *asteroids* (remove a *asteroids*)))
 
 
 ;;;; ASTEROID-FIELD-SIZE function
@@ -366,7 +387,10 @@
     (draw-polygon ship 255 255 255)
     
     (if (and (eq *thrust* t) (zerop (mod *game-tick* 4)))
-	(draw-polygon flame 255 0 0))))
+	(draw-polygon flame 255 0 0))
+
+    (if (and (eq *player-shield* t) (zerop (mod *game-tick* 4)))
+	(draw-circle (round (player-x p)) (round (player-y p)) 30 255 0 0))))
 
 
 
@@ -484,6 +508,22 @@
 		 (setf (player-laser-y l) -1)))))
 
 
+;;;; PLAYER-DESTROYED function
+
+(defun player-destroyed ()
+  (setf *player-lives* (decf *player-lives*))
+  (create-player)
+  (setf *player-shield* t)
+  (setf *player-shield-timer* 120))
+
+
+(defun player-shield-activated ()
+  (if (eq *player-shield* t)
+      (progn (setf *player-shield-timer* (decf *player-shield-timer*))
+	     (if (<= *player-shield-timer* 0)
+		 (setf *player-shield* nil)))))
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;; LEVEL ;;;;;;;;;;;;;;;;;;;;;;;;
 
 
@@ -555,6 +595,7 @@
   
   (unless (eql *pause* t)
     (update-game-tick)
+    (player-shield-activated)
     (update-player)
     (update-asteroids)
     (ship-collide-asteroid)
@@ -611,11 +652,16 @@
 ;;;; RESET-GAME function
 
 (defun reset-game ()
+  (setf *random-state* (make-random-state t))
   (create-player)
   (setf *asteroids* nil)
   (setf *player-laser* nil)
   (setf *pause* nil)
-  (setf *game-tick* 0))
+  (setf *game-tick* 0)
+  (setf *wave* 1)
+  (setf *player-lives* 3)
+  (setf *player-shield* t)
+  (setf *player-shield-timer* 120))
 
 
 ;;;; INITIALIZE-GAME function
