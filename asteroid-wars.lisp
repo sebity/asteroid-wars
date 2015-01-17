@@ -22,6 +22,7 @@
 (defparameter *player* nil)
 (defparameter *player-laser* nil)
 (defparameter *player-lives* 0) ; default 3
+(defparameter *player-score* 0)
 (defparameter *player-shield* nil)
 (defparameter *player-shield-timer* 0)
 (defparameter *thrust* nil)
@@ -34,6 +35,7 @@
 (defparameter *asteroid-count* 0) ; default (11 + wave) large per wave
 (defparameter *asteroids* nil)
 (defparameter *asteroid-field* 65)
+(defparameter *asteroid-schedule* nil)
 
 ;;;; Enemy Params
 (defparameter *enemy* nil)
@@ -42,6 +44,7 @@
 ;;;; Sound Params
 (defparameter *mixer-opened* nil)
 (defparameter *music* nil)
+(defparameter *sound-thrust* nil)
 (defparameter *soundfx* nil)
 
 ;;;; GFX Params
@@ -74,7 +77,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;; SHIP/ASTEROID TEMPLATES ;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defparameter *tmpl-player* '((0 -20) (-12 20) (-5 15) (5 15) (12 20)))
-(defparameter *tmpl-player-flame* '((-5 13) (0 25) (5 13)))
+(defparameter *tmpl-player-flame* '((-5 15) (0 30) (5 15)))
 
 (defparameter *tmpl-asteroid-1* '((0 -60) (40 -40) (60 0) (40 40) (0 60)
 				  (-40 40) (-60 0) (-40 -40)))
@@ -83,7 +86,9 @@
 (defparameter *tmpl-asteroid-3* '((0 -15) (10 -15) (15 0) (10 10) (0 15)
 				  (-10 10) (-15 0) (-10 -10)))
 
-;(defparameter *tmpl-large-ship* '(()))
+(defparameter *tmpl-ship-large-top* '((8 -15) (12 -8) (-12 -8) (-8 -15)))
+(defparameter *tmpl-ship-large-middle* '((-12 -8) (-35 0) (35 0) (12 -8)))
+(defparameter *tmpl-ship-large-bottom* '((-35 0) (-15 10) (15 10) (35 0)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; STRUCTS/CLASSES ;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -115,7 +120,22 @@
   (shape nil))
 
 
+(defstruct enemy
+  (x 0)
+  (y 0)
+  (vx 0)
+  (vy 0)
+  (angle 0)
+  (ship-type nil))
 
+
+(defstruct enemy-laser
+  (x 0)
+  (y 0)
+  (vx 0)
+  (vy 0)
+  (angle 0)
+  (time 0))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;; SLIME ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -188,7 +208,8 @@
 	  (+ (asteroid-field-size (asteroid-stage a)) 10))
       (progn (split-asteroid a)
 	     (unless (eq *player-shield* t)
-	       (player-destroyed)))))
+	       (player-destroyed)
+	       (play-sound 6)))))
 
 
 ;;;; LASER-COLLIDE-ASTEROID function
@@ -199,7 +220,9 @@
 			 (square (- (asteroid-y a) (player-laser-y l)))))
 		(asteroid-field-size (asteroid-stage a)))
 	    (progn (split-asteroid a)
-		   (setf *player-laser* (remove l *player-laser*))))))
+		   (setf *player-laser* (remove l *player-laser*))
+		   (update-score-kill 'asteroid (asteroid-stage a))
+		   (play-sound (+ (random 4) 1))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; PRIMITIVES ;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -261,13 +284,107 @@
 
 ;;;; PLAY-SOUND function
 
-(defun play-sound (s)
-  (sdl-mixer:play-sample (aref *soundfx* s)))
+(defun play-sound (s &optional (loop-p nil))
+  (sdl-mixer:play-sample (aref *soundfx* s) :loop loop-p))
 
+(defun stop-sound (s &optional (loop-p nil))
+  (sdl-mixer:halt-sample (aref *soundfx* s)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; ENEMY ;;;;;;;;;;;;;;;;;;;;;;;;
 
+;;;; CREATE-ENEMY function
+
+(defun create-enemy (&optional (ship-type 1))
+  (push (make-enemy :x 0
+		    :y (+ (random 400) 150)
+		    :vx 2
+		    :vy 0
+		    :angle 0
+		    :ship-type ship-type) *enemy*))
+
+
+;;;; UPDATE-ENEMIES function
+
+(defun update-enemies ()
+  (loop for e in *enemy*
+     do (update-enemy-position e)))
+
+
+;;;; UPDATE-ENEMY-POSITION function
+
+(defun update-enemy-position (e)
+  (let ((dx 60)
+	(dy 40))
+
+    (setf (enemy-x e) (+ (enemy-x e) (enemy-vx e)))
+    (setf (enemy-y e) (+ (enemy-y e) (enemy-vy e)))
+
+    (if (< (enemy-x e) (- dx))
+	(if (= (enemy-ship-type e) 1)
+	    (setf *enemy* (remove e *enemy*))
+	    (setf (enemy-x e) (+ *game-width* dx))))
+
+    (if (> (enemy-x e) (+ *game-width* dx))
+	(if (= (enemy-ship-type e) 1)
+	    (setf *enemy* (remove e *enemy*))
+	    (setf (enemy-x e) (- dx))))
+
+    (if (< (enemy-y e) (- dy))
+	(setf (enemy-y e) (+ *game-height* dy)))
+
+    (if (> (enemy-y e) (+ *game-height* dy))
+	(setf (enemy-y e) (- dy)))))
+
+
+;;;; DRAW-ENEMIES function
+
+(defun draw-enemies ()
+    (loop for e in *enemy*
+       do (progn (draw-enemy-ship e))))
+
+
+(defun draw-enemy-ship (e)
+  (let ((ship-top nil)
+	(ship-middle nil)
+	(ship-bottom nil))
+
+    (dolist (s *tmpl-ship-large-top*)
+      (push (rotate (first s) (second s) (enemy-x e) (enemy-y e) 0) ship-top))
+
+    (dolist (s *tmpl-ship-large-middle*)
+      (push (rotate (first s) (second s) (enemy-x e) (enemy-y e) 0) ship-middle))
+
+    (dolist (s *tmpl-ship-large-bottom*)
+      (push (rotate (first s) (second s) (enemy-x e) (enemy-y e) 0) ship-bottom))
+
+    (draw-polygon ship-top 200 200 200)
+    (draw-polygon ship-middle 200 200 200)
+    (draw-polygon ship-bottom 200 200 200)))
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;; ASTEROIDS ;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;; CREATE-ASTEROID-SCHEDULE function
+
+(defun create-asteroid-schedule ()
+  (setf *asteroid-schedule* nil)
+
+  (dotimes (x 4)
+    (create-asteroid))
+
+  (dotimes (x (+ 5 *wave*))
+    (push (random (* 60 60)) *asteroid-schedule*)))
+
+
+;;;; CHECK-ASTEROID-START-TIME function
+
+(defun check-asteroid-start-time ()
+  (dolist (a *asteroid-schedule*)
+    (if (<= a *game-tick*)
+	(progn (create-asteroid)
+	       (setf *asteroid-schedule* (remove a *asteroid-schedule*))))))
+
 
 ;;;; CREATE-ASTEROID function
 
@@ -307,6 +424,7 @@
 
 
 ;;;; ASTEROID-FIELD-SIZE function
+
 (defun asteroid-field-size (stage)
   (ash *asteroid-field* (- 1 stage)))
 
@@ -467,7 +585,8 @@
     (push (make-player-laser :x (round (player-x p)) :y (round (player-y p))
 			     :vx vx :vy vy
 			     :angle (rem (player-angle p) 360)
-			     :time 75) *player-laser*)))
+			     :time 75) *player-laser*))
+  (play-sound 0))
 
 
 ;;;; DRAW-LASER function
@@ -514,8 +633,11 @@
   (setf *player-lives* (decf *player-lives*))
   (create-player)
   (setf *player-shield* t)
-  (setf *player-shield-timer* 120))
+  (setf *player-shield-timer* 120)
+  (play-sound 5))
 
+
+;;;; PLAYER-SHIELD-ACTIVATED function
 
 (defun player-shield-activated ()
   (if (eq *player-shield* t)
@@ -524,15 +646,30 @@
 		 (setf *player-shield* nil)))))
 
 
+;;;; PLAY-SOUND-THRUST function
+
+(defun play-sound-thrust ()
+  (sdl-mixer:play-music *sound-thrust* :loop t))
+
+
+;;;; STOP-SOUND-THRUST function
+
+(defun stop-sound-thrust ()
+  (sdl-mixer:halt-music 100))
+
 ;;;;;;;;;;;;;;;;;;;;;;;; LEVEL ;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 ;;;; DISPLAY-LEVEL function
 
 (defun display-level ()
-  (let ((p *player*))
-    (draw-text (format nil "vx: ~a" (player-vx p)) 10 10 255 255 255 *ttf-font-small*)
-    (draw-text (format nil "vy: ~a" (player-vy p)) 10 20 255 255 255 *ttf-font-small*)))
+  ;(let ((p *player*))
+  ;  (draw-text (format nil "vx: ~a" (player-vx p)) 10 10 255 255 255 *ttf-font-small*)
+  ;  (draw-text (format nil "vy: ~a" (player-vy p)) 10 20 255 255 255 *ttf-font-small*))
+
+  (draw-text (format nil "Lives: ~a" *player-lives*) 10 10 255 255 255)
+  (draw-text (format nil "Wave: ~a" *wave*) 400 10 255 255 255)
+  (draw-text (format nil "Score: ~a" *player-score*) 900 10 255 255 255))
 
 
 ;;;; DRAW-GAME-UI function
@@ -542,6 +679,12 @@
       (draw-text "Paused" 
 	     380 280 255 255 255 *ttf-font-large*)))
 
+(defun update-score-kill (type size)
+  (cond ((equalp type 'asteroid) 
+	 (cond ((= size 2) (setf *player-score* (+ *player-score* 20)))
+	       ((= size 3) (setf *player-score* (+ *player-score* 30)))
+	       (t (setf *player-score* (+ *player-score* 10)))))))
+
 
 ;;;; UPDATE-GAME-TICK function
 
@@ -549,10 +692,30 @@
   (setf *game-tick* (incf *game-tick*)))
 
 
+;;;; END-OF-WAVE-P function
+
+(defun end-of-wave-p ()
+  (if (and (zerop (length *asteroid-schedule*))
+	   (zerop (length *asteroids*)))
+      (progn (setf *player-score* (+ *player-score* 
+				     (* 1000 *wave*)
+				     (* 250 *player-lives* *wave*)))
+	     (setf *wave* (incf *wave*))
+	     (new-wave))))
+
+
+;;;; GAME-OVER-P function
+
+(defun game-over-p ()
+  (if (zerop *player-lives*)
+      (change-game-state)))
+
+
 ;;;; NEW-WAVE function
 
 (defun new-wave ()
-  (setf *game-tick* 0))
+  (setf *game-tick* 0)
+  (create-asteroid-schedule))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;; SCREENS ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -561,21 +724,23 @@
 ;;;; DISPLAY-END-GAME function
 
 (defun display-end-game ()
-  (draw-text "Game Over" 20 100 255 255 255)
+  (draw-text "Asteroid Wars" 450 20 255 255 255 *ttf-font-huge*)
 
-  (draw-text "Press SPACE to Continue..." 290 570 255 255 255))
+  (draw-text "Game Over" 480 150 255 255 255 *ttf-font-huge*)
+
+  (draw-text (format nil "Score: ~a" *player-score*) 420 300 255 255 255 *ttf-font-huge*)
+
+  (draw-text "Press SPACE to Continue..." 420 740 255 255 255))
 
 
 ;;;; DISPLAY-MENU function
 
 (defun display-menu ()
-  (gl:color 1 0 1)
+  (draw-text "Asteroid Wars" 450 20 255 255 255 *ttf-font-huge*)
 
-  (draw-text "Asteroid Wars" 20 20 255 255 255 *ttf-font-huge*)
+  (draw-text "Intro Screen Goes Here..." 450 350 255 255 0)
 
-  (draw-text "Intro Screen" 20 100 255 255 255)
-
-  (draw-text "Press SPACE to Continue..." 290 570 255 255 255))
+  (draw-text "Press SPACE to Continue..." 420 740 255 255 255))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;; GAME STATE ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -598,13 +763,18 @@
     (player-shield-activated)
     (update-player)
     (update-asteroids)
+    (update-enemies)
     (ship-collide-asteroid)
     (update-laser)
+    (check-asteroid-start-time)
+    (end-of-wave-p)
+    (game-over-p)
     )
 
   (display-level)
   (draw-player)
   (draw-asteroids)
+  (draw-enemies)
   (draw-laser)
   (draw-game-ui))
 
@@ -622,7 +792,8 @@
 (defun change-game-state ()
   (cond ((zerop *game-state*) 
 	 (progn (reset-game)
-		(setf *game-state* 1)))
+		(setf *game-state* 1)
+		(play-sound 5)))
 
 	((= *game-state* 1) (setf *game-state* 2))
 	
@@ -654,14 +825,17 @@
 (defun reset-game ()
   (setf *random-state* (make-random-state t))
   (create-player)
+  (setf *enemy* nil)
   (setf *asteroids* nil)
   (setf *player-laser* nil)
   (setf *pause* nil)
   (setf *game-tick* 0)
+  (setf *player-score* 0)
   (setf *wave* 1)
   (setf *player-lives* 3)
   (setf *player-shield* t)
-  (setf *player-shield-timer* 120))
+  (setf *player-shield-timer* 120)
+  (create-asteroid-schedule))
 
 
 ;;;; INITIALIZE-GAME function
@@ -673,11 +847,18 @@
 ;;;; SETUP-AUDIO function
 
 (defun setup-audio ()
-  (setf *soundfx* (make-array 1))
+  (setf *soundfx* (make-array 7))
   (sdl-mixer:init-mixer :mp3)
   (setf *mixer-opened* (sdl-mixer:OPEN-AUDIO :chunksize 1024 :enable-callbacks nil))
   (when *mixer-opened*
-    ;(setf (aref *soundfx* 0) (sdl-mixer:load-sample (sdl:create-path "beep.ogg" *audio-root*)))
+    (setf (aref *soundfx* 0) (sdl-mixer:load-sample (sdl:create-path "laser-1.ogg" *audio-root*)))
+    (setf (aref *soundfx* 1) (sdl-mixer:load-sample (sdl:create-path "explosion-1.ogg" *audio-root*)))
+    (setf (aref *soundfx* 2) (sdl-mixer:load-sample (sdl:create-path "explosion-2.ogg" *audio-root*)))
+    (setf (aref *soundfx* 3) (sdl-mixer:load-sample (sdl:create-path "explosion-3.ogg" *audio-root*)))
+    (setf (aref *soundfx* 4) (sdl-mixer:load-sample (sdl:create-path "explosion-4.ogg" *audio-root*)))
+    (setf (aref *soundfx* 5) (sdl-mixer:load-sample (sdl:create-path "shield-1.ogg" *audio-root*)))
+    (setf (aref *soundfx* 6) (sdl-mixer:load-sample (sdl:create-path "player-explosion.ogg" *audio-root*)))
+    (setf *sound-thrust* (sdl-mixer:load-music (sdl:create-path "thrust.ogg" *audio-root*)))
     (sample-finished-action)
     (sdl-mixer:allocate-channels 16)))
 
@@ -694,6 +875,13 @@
 ;;;; CLEAN-UP function
 
 (defun clean-up ()
+  (when *sound-thrust*
+    (when (sdl-mixer:music-playing-p)
+      (sdl-mixer:Pause-Music)
+      (sdl-mixer:Halt-Music))
+    (sdl:Free *sound-thrust*)
+    (setf *sound-thrust* nil))
+
   (when *music*
     (when (sdl-mixer:music-playing-p)
       (sdl-mixer:Pause-Music)
@@ -746,17 +934,21 @@
       (:key-down-event (:key key)
 		       (case key
 			 (:sdl-key-a (if (= *game-state* 1)
-					 (create-asteroid 1)))
+					 (create-enemy)))
 			 (:sdl-key-z (if (= *game-state* 1)
 					 (fire-laser)))
 			 (:sdl-key-p (if (= *game-state* 1)
 					 (pause-game)))
 			 (:sdl-key-q (if (= *game-state* 1)
 					 (change-game-state)))
+			 (:sdl-key-up (if (= *game-state* 1)
+					  (play-sound-thrust)))
 			 (:sdl-key-space (continue-option))
 			 (:sdl-key-escape (sdl:push-quit-event))))
       (:key-up-event (:key key)
-		     (case key))
+		     (case key
+		       (:sdl-key-up (if (= *game-state* 1)
+					(stop-sound-thrust)))))
       (:idle ()
 	     (setf *thrust* nil)
 	     (when (sdl:get-key-state :sdl-key-left) (player-move 'left))
