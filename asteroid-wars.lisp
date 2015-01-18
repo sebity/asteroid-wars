@@ -49,7 +49,8 @@
 (defparameter *soundfx* nil)
 
 ;;;; GFX Params
-;(defparameter *gfx-bg* (merge-pathnames "gfx-bg.jpg" *gfx-root*))
+(defparameter *gfx-intro* (merge-pathnames "gfx-intro.jpg" *gfx-root*))
+(defparameter *gfx-game-over* (merge-pathnames "gfx-game-over.jpg" *gfx-root*))
 
 ;;;; Font Params
 (defparameter *terminus-ttf-12* 
@@ -887,11 +888,9 @@
 ;;;; DISPLAY-END-GAME function
 
 (defun display-end-game ()
-  (draw-text "Asteroid Wars" 450 20 255 255 255 *ttf-font-huge*)
+  (sdl:draw-surface-at-* (sdl:load-image *gfx-game-over*) 0 0)
 
-  (draw-text "Game Over" 480 150 255 255 255 *ttf-font-huge*)
-
-  (draw-text (format nil "Score: ~a" *player-score*) 420 300 255 255 255 *ttf-font-huge*)
+  (draw-text (format nil "SCORE: ~a" *player-score*) 420 440 255 255 255 *ttf-font-huge*)
 
   (draw-text "Press SPACE to Continue..." 420 740 255 255 255))
 
@@ -899,9 +898,7 @@
 ;;;; DISPLAY-MENU function
 
 (defun display-menu ()
-  (draw-text "Asteroid Wars" 450 20 255 255 255 *ttf-font-huge*)
-
-  (draw-text "Intro Screen Goes Here..." 450 350 255 255 0)
+  (sdl:draw-surface-at-* (sdl:load-image *gfx-intro*) 0 0)
 
   (draw-text "Press SPACE to Continue..." 420 740 255 255 255))
 
