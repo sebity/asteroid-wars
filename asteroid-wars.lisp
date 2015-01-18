@@ -258,6 +258,19 @@
 		   (update-score-kill 'enemy (enemy-ship-type e))
 		   (play-sound (+ (random 4) 1))))))
 
+
+;;;; ENEMY-LASER-COLLIDE-PLAYER function
+
+(defun enemy-laser-collide-player (l)
+  (let ((p *player*))
+    (if (<= (sqrt (+ (square (- (enemy-laser-x l) (player-x p)))
+		     (square (- (enemy-laser-y l) (player-y p)))))
+	    20)
+	(progn (setf *enemy-laser* (remove l *enemy-laser*))
+	       (unless (eq *player-shield* t)
+		 (player-destroyed)
+		 (play-sound 6))))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;; PRIMITIVES ;;;;;;;;;;;;;;;;;;;;;;;;
 
 
@@ -418,7 +431,7 @@
     (if (> (enemy-y e) (+ *game-height* dy))
 	(setf (enemy-y e) (- dy))))
 
-  (if (< (random 1000) 10)
+  (if (< (random 1000) (+ 10 (* 2 *wave*)))
       (enemy-fire-shot e)))
 
 
@@ -432,9 +445,9 @@
     (if (= (enemy-ship-type e) 1)
 	(push (make-enemy-laser :x (round (enemy-x e)) :y (round (enemy-y e))
 				:vx vx :vy vy
-				:time 60) *enemy-laser*)
+				:time 90) *enemy-laser*)))
 
-	(play-sound 0))))
+  (play-sound 7))
 
 
 ;;;; DRAW-ENEMIES function
@@ -486,7 +499,7 @@
       (setf *enemy-laser* (remove l *enemy-laser*))
       (progn (setf (enemy-laser-x l) (+ (enemy-laser-x l) (enemy-laser-vx l)))
 	     (setf (enemy-laser-y l) (- (enemy-laser-y l) (enemy-laser-vy l)))
-	     ;(laser-collide-asteroid l)
+	     (enemy-laser-collide-player l)
 
 	     (if (< (enemy-laser-x l) -1)
 		 (setf (enemy-laser-x l) (+ *game-width* 1)))
@@ -1003,7 +1016,7 @@
 ;;;; SETUP-AUDIO function
 
 (defun setup-audio ()
-  (setf *soundfx* (make-array 7))
+  (setf *soundfx* (make-array 8))
   (sdl-mixer:init-mixer :mp3)
   (setf *mixer-opened* (sdl-mixer:OPEN-AUDIO :chunksize 1024 :enable-callbacks nil))
   (when *mixer-opened*
@@ -1014,6 +1027,7 @@
     (setf (aref *soundfx* 4) (sdl-mixer:load-sample (sdl:create-path "explosion-4.ogg" *audio-root*)))
     (setf (aref *soundfx* 5) (sdl-mixer:load-sample (sdl:create-path "shield-1.ogg" *audio-root*)))
     (setf (aref *soundfx* 6) (sdl-mixer:load-sample (sdl:create-path "player-explosion.ogg" *audio-root*)))
+    (setf (aref *soundfx* 7) (sdl-mixer:load-sample (sdl:create-path "laser-2.ogg" *audio-root*)))
     (setf *sound-thrust* (sdl-mixer:load-music (sdl:create-path "thrust.ogg" *audio-root*)))
     (sample-finished-action)
     (sdl-mixer:allocate-channels 16)))
