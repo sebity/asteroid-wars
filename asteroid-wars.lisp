@@ -40,6 +40,7 @@
 ;;;; Enemy Params
 (defparameter *enemy* nil)
 (defparameter *enemy-laser* nil)
+(defparameter *enemy-schedule* nil)
 
 ;;;; Sound Params
 (defparameter *mixer-opened* nil)
@@ -197,16 +198,36 @@
 (defun ship-collide-asteroid ()
   (let ((p *player*))
     (loop for a in *asteroids*
-       do (ship-collide a p))))
+       do (ship-collide-asteroid-p a p))))
 
 
-;;;; SHIP-COLLIDE function
+;;;; SHIP-COLLIDE-ASTEROID-P function
 
-(defun ship-collide (a p)
+(defun ship-collide-asteroid-p (a p)
   (if (<= (sqrt (+ (square (- (asteroid-x a) (player-x p)))
 		   (square (- (asteroid-y a) (player-y p)))))
 	  (+ (asteroid-field-size (asteroid-stage a)) 10))
       (progn (split-asteroid a)
+	     (unless (eq *player-shield* t)
+	       (player-destroyed)
+	       (play-sound 6)))))
+
+
+;;;; SHIP-COLLIDE-ENEMY function
+
+(defun ship-collide-enemy ()
+  (let ((p *player*))
+    (loop for e in *enemy*
+       do (ship-collide-enemy-p e p))))
+
+
+;;;; SHIP-COLLIDE-ENEMY-P function
+
+(defun ship-collide-enemy-p (e p)
+  (if (<= (sqrt (+ (square (- (enemy-x e) (player-x p)))
+		   (square (- (enemy-y e) (player-y p)))))
+	  (+ (enemy-field-size (enemy-ship-type e)) 10))
+      (progn (setf *enemy* (remove e *enemy*))
 	     (unless (eq *player-shield* t)
 	       (player-destroyed)
 	       (play-sound 6)))))
@@ -222,6 +243,19 @@
 	    (progn (split-asteroid a)
 		   (setf *player-laser* (remove l *player-laser*))
 		   (update-score-kill 'asteroid (asteroid-stage a))
+		   (play-sound (+ (random 4) 1))))))
+
+
+;;;; LASER-COLLIDE-ASTEROID function
+
+(defun laser-collide-enemy (l)
+  (loop for e in *enemy*
+     do (if (<= (sqrt (+ (square (- (enemy-x e) (player-laser-x l)))
+			 (square (- (enemy-y e) (player-laser-y l)))))
+		(enemy-field-size (enemy-ship-type e)))
+	    (progn (setf *enemy* (remove e *enemy*))
+		   (setf *player-laser* (remove l *player-laser*))
+		   (update-score-kill 'enemy (enemy-ship-type e))
 		   (play-sound (+ (random 4) 1))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; PRIMITIVES ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -292,15 +326,64 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;; ENEMY ;;;;;;;;;;;;;;;;;;;;;;;;
 
+
+;;;; CREATE-ENEMY-SCHEDULE function
+
+(defun create-enemy-schedule ()
+  (setf *enemy-schedule* nil)
+
+  (dotimes (x 5)
+    (push (random (* 60 (+ 60 (* 5 *wave*)))) *enemy-schedule*)))
+
+
+;;;; CHECK-ENEMY-START-TIME function
+
+(defun check-enemy-start-time ()
+  (dolist (e *enemy-schedule*)
+    (if (<= e *game-tick*)
+	(progn (create-enemy)
+	       (setf *enemy-schedule* (remove e *enemy-schedule*))))))
+
+
 ;;;; CREATE-ENEMY function
 
 (defun create-enemy (&optional (ship-type 1))
-  (push (make-enemy :x 0
-		    :y (+ (random 400) 150)
-		    :vx 2
-		    :vy 0
-		    :angle 0
-		    :ship-type ship-type) *enemy*))
+  (let ((x 0)
+	(y 0)
+	(vx (* (- (random 2.0) 1.0) 2))
+	(vy (* (- (random 2.0) 1.0) 2))
+	(enter-lr (random 2))
+	(enter-any (random 4)))
+
+    (cond ((= ship-type 1)
+	   (if (zerop enter-lr)
+	       (progn (setf x -10)
+		      (setf y (+ (random 500) 150))
+		      (setf vx 1.5)
+		      (setf vy 0))
+	       (progn (setf x *game-width*)
+		      (setf y (+ (random 500) 150))
+		      (setf vx -1.5)
+		      (setf vy 0))))
+	  
+	  ((= ship-type 2)
+	   (cond ((zerop enter-any) ;top
+		  (progn (setf x (random *game-width*))
+			 (setf y -10)))
+
+		 ((= enter-any 1) ;right
+		  (progn (setf x (+ *game-width* 10))
+			 (setf y (random *game-height*))))
+
+		 ((= enter-any 2) ;bottom
+		  (progn (setf x (random *game-width*))
+			 (setf y (+ *game-height* 10))))
+
+		 (t (progn (setf x -10)
+			   (setf y (random *game-height*)))))))
+	
+
+    (push (make-enemy :x x :y y :vx vx :vy vy :angle 0 :ship-type ship-type) *enemy*)))
 
 
 ;;;; UPDATE-ENEMIES function
@@ -333,7 +416,25 @@
 	(setf (enemy-y e) (+ *game-height* dy)))
 
     (if (> (enemy-y e) (+ *game-height* dy))
-	(setf (enemy-y e) (- dy)))))
+	(setf (enemy-y e) (- dy))))
+
+  (if (< (random 1000) 10)
+      (enemy-fire-shot e)))
+
+
+;;;; ENEMY-FIRE-SHOT function
+
+(defun enemy-fire-shot (e)
+  (let* ((vec-x (sin (deg-to-rad (random 360))))
+	 (vec-y (cos (deg-to-rad (random 360))))
+	 (vx (* 5 vec-x))
+	 (vy (* 5 vec-y)))
+    (if (= (enemy-ship-type e) 1)
+	(push (make-enemy-laser :x (round (enemy-x e)) :y (round (enemy-y e))
+				:vx vx :vy vy
+				:time 60) *enemy-laser*)
+
+	(play-sound 0))))
 
 
 ;;;; DRAW-ENEMIES function
@@ -362,6 +463,50 @@
     (draw-polygon ship-bottom 200 200 200)))
 
 
+;;;; DRAW-ENEMY-LASER function
+
+(defun draw-enemy-laser ()
+  (loop for l in *enemy-laser*
+     do (draw-circle (round (enemy-laser-x l)) (round (enemy-laser-y l)) 1 255 0 0)))
+
+
+;;;; UPDATE-ENEMY-LASER function
+
+(defun update-enemy-laser ()
+  (loop for l in *enemy-laser*
+     do (update-enemy-laser-position l)))
+
+
+;;;; UPDATE-ENEMY-LASER-POSITION function
+
+(defun update-enemy-laser-position (l)
+  (setf (enemy-laser-time l) (decf (enemy-laser-time l)))
+
+  (if (<= (enemy-laser-time l) 0)
+      (setf *enemy-laser* (remove l *enemy-laser*))
+      (progn (setf (enemy-laser-x l) (+ (enemy-laser-x l) (enemy-laser-vx l)))
+	     (setf (enemy-laser-y l) (- (enemy-laser-y l) (enemy-laser-vy l)))
+	     ;(laser-collide-asteroid l)
+
+	     (if (< (enemy-laser-x l) -1)
+		 (setf (enemy-laser-x l) (+ *game-width* 1)))
+
+	     (if (> (enemy-laser-x l) (+ *game-width* 1))
+		 (setf (enemy-laser-x l) -1))
+
+	     (if (< (enemy-laser-y l) -1)
+		 (setf (enemy-laser-y l) (+ *game-height* 1)))
+
+	     (if (> (enemy-laser-y l) (+ *game-height* 1))
+		 (setf (enemy-laser-y l) -1)))))
+
+
+;;;; ENEMY-FIELD-SIZE function
+
+(defun enemy-field-size (ship-type)
+  (if (= ship-type 1)
+      20))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;; ASTEROIDS ;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -374,7 +519,7 @@
     (create-asteroid))
 
   (dotimes (x (+ 5 *wave*))
-    (push (random (* 60 60)) *asteroid-schedule*)))
+    (push (random (* 60 (+ 75 (* 5 *wave*)))) *asteroid-schedule*)))
 
 
 ;;;; CHECK-ASTEROID-START-TIME function
@@ -613,6 +758,7 @@
       (progn (setf (player-laser-x l) (+ (player-laser-x l) (player-laser-vx l)))
 	     (setf (player-laser-y l) (- (player-laser-y l) (player-laser-vy l)))
 	     (laser-collide-asteroid l)
+	     (laser-collide-enemy l)
 
 	     (if (< (player-laser-x l) -1)
 		 (setf (player-laser-x l) (+ *game-width* 1)))
@@ -683,7 +829,10 @@
   (cond ((equalp type 'asteroid) 
 	 (cond ((= size 2) (setf *player-score* (+ *player-score* 20)))
 	       ((= size 3) (setf *player-score* (+ *player-score* 30)))
-	       (t (setf *player-score* (+ *player-score* 10)))))))
+	       (t (setf *player-score* (+ *player-score* 10)))))
+
+	((equalp type 'enemy)
+	 (cond ((= size 1) (setf *player-score* (+ *player-score* 150)))))))
 
 
 ;;;; UPDATE-GAME-TICK function
@@ -715,7 +864,8 @@
 
 (defun new-wave ()
   (setf *game-tick* 0)
-  (create-asteroid-schedule))
+  (create-asteroid-schedule)
+  (create-enemy-schedule))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;; SCREENS ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -765,8 +915,11 @@
     (update-asteroids)
     (update-enemies)
     (ship-collide-asteroid)
+    (ship-collide-enemy)
     (update-laser)
+    (update-enemy-laser)
     (check-asteroid-start-time)
+    (check-enemy-start-time)
     (end-of-wave-p)
     (game-over-p)
     )
@@ -776,6 +929,7 @@
   (draw-asteroids)
   (draw-enemies)
   (draw-laser)
+  (draw-enemy-laser)
   (draw-game-ui))
 
 
@@ -828,6 +982,7 @@
   (setf *enemy* nil)
   (setf *asteroids* nil)
   (setf *player-laser* nil)
+  (setf *enemy-laser* nil)
   (setf *pause* nil)
   (setf *game-tick* 0)
   (setf *player-score* 0)
@@ -835,7 +990,8 @@
   (setf *player-lives* 3)
   (setf *player-shield* t)
   (setf *player-shield-timer* 120)
-  (create-asteroid-schedule))
+  (create-asteroid-schedule)
+  (create-enemy-schedule))
 
 
 ;;;; INITIALIZE-GAME function
