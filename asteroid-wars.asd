@@ -1,7 +1,8 @@
 ;;;; asteroid-wars.asd
 
 (asdf:defsystem #:asteroid-wars
-  :description "A remake of the classic game Asteroids"
+  :version "1.0"
+  :description "A remake of the classic space shooter game Asteroids"
   :author "Jan Tatham <jan@sebity.com>"
   :license "GPL v2"
   :depends-on (#:lispbuilder-sdl
