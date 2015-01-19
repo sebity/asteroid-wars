@@ -823,10 +823,6 @@
 ;;;; DISPLAY-LEVEL function
 
 (defun display-level ()
-  ;(let ((p *player*))
-  ;  (draw-text (format nil "vx: ~a" (player-vx p)) 10 10 255 255 255 *ttf-font-small*)
-  ;  (draw-text (format nil "vy: ~a" (player-vy p)) 10 20 255 255 255 *ttf-font-small*))
-
   (draw-text (format nil "Lives: ~a" *player-lives*) 10 10 255 255 255)
   (draw-text (format nil "Wave: ~a" *wave*) 400 10 255 255 255)
   (draw-text (format nil "Score: ~a" *player-score*) 900 10 255 255 255))
@@ -1100,8 +1096,6 @@
 		   t)
       (:key-down-event (:key key)
 		       (case key
-			 (:sdl-key-a (if (= *game-state* 1)
-					 (create-enemy)))
 			 (:sdl-key-z (if (= *game-state* 1)
 					 (fire-laser)))
 			 (:sdl-key-p (if (= *game-state* 1)
