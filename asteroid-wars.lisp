@@ -42,6 +42,9 @@
 (defparameter *enemy-laser* nil)
 (defparameter *enemy-schedule* nil)
 
+;;;; Explosion Params
+(defparameter *explosions* nil)
+
 ;;;; Sound Params
 (defparameter *mixer-opened* nil)
 (defparameter *music* nil)
@@ -139,6 +142,15 @@
   (angle 0)
   (time 0))
 
+(defstruct explosion
+  (x 0)
+  (y 0)
+  (vx 0)
+  (vy 0)
+  (r 0)
+  (g 0)
+  (b 0)
+  (fade-rate 0))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; SLIME ;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -228,7 +240,8 @@
   (if (<= (sqrt (+ (square (- (enemy-x e) (player-x p)))
 		   (square (- (enemy-y e) (player-y p)))))
 	  (+ (enemy-field-size (enemy-ship-type e)) 10))
-      (progn (setf *enemy* (remove e *enemy*))
+      (progn (create-explosion (enemy-x e) (enemy-y e) t)
+	     (setf *enemy* (remove e *enemy*))
 	     (unless (eq *player-shield* t)
 	       (player-destroyed)
 	       (play-sound 6)))))
@@ -254,7 +267,8 @@
      do (if (<= (sqrt (+ (square (- (enemy-x e) (player-laser-x l)))
 			 (square (- (enemy-y e) (player-laser-y l)))))
 		(enemy-field-size (enemy-ship-type e)))
-	    (progn (setf *enemy* (remove e *enemy*))
+	    (progn (create-explosion (enemy-x e) (enemy-y e) t)
+		   (setf *enemy* (remove e *enemy*))
 		   (setf *player-laser* (remove l *player-laser*))
 		   (update-score-kill 'enemy (enemy-ship-type e))
 		   (play-sound (+ (random 4) 1))))))
@@ -458,6 +472,8 @@
        do (progn (draw-enemy-ship e))))
 
 
+;;;; DRAW-ENEMY-SHIP function
+
 (defun draw-enemy-ship (e)
   (let ((ship-top nil)
 	(ship-middle nil)
@@ -579,6 +595,7 @@
   (if (< (asteroid-stage a) 3)
       (progn (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a))
 	     (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a))))
+  (create-explosion (asteroid-x a) (asteroid-y a))
   (setf *asteroids* (remove a *asteroids*)))
 
 
@@ -631,6 +648,60 @@
 
     (if (> (asteroid-y a) (+ *game-height* dy))
 	(setf (asteroid-y a) (- dy)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;; EXPLOSION ;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;; CREATE-EXPLOSION function
+
+(defun create-explosion (x y &optional (rand-p nil))
+  (dotimes (n 10)
+    (let* ((vec-x (sin (deg-to-rad (random 360))))
+	   (vec-y (cos (deg-to-rad (random 360))))
+	   (vx (* 3 vec-x))
+	   (vy (* 3 vec-y)))
+      (if (eq rand-p t)
+	  (push (make-explosion :x x :y y :vx vx :vy vy
+				:r (random 255) :g (random 255) :b (random 255)
+				:fade-rate (+ (random 5) 5)) *explosions*)
+	  (push (make-explosion :x x :y y :vx vx :vy vy
+				:r 255 :g 255 :b 255
+				:fade-rate (+ (random 5) 5)) *explosions*)))))
+
+
+;;;; DRAW-EXPLOSIONS function
+
+(defun draw-explosions ()
+  (loop for e in *explosions*
+     do (draw-circle (round (explosion-x e)) (round (explosion-y e))
+		     2 (explosion-r e) (explosion-g e) (explosion-b e))))
+
+
+;;;; UPDATE-EXPLOSIONS function
+
+(defun update-explosions ()
+  (loop for e in *explosions*
+     do (update-explosion-position e)))
+
+
+;;;; UPDATE-EXPLOSION-POSITION function
+
+(defun update-explosion-position (e)
+  (setf (explosion-r e) (- (explosion-r e) (explosion-fade-rate e)))
+  (setf (explosion-g e) (- (explosion-g e) (explosion-fade-rate e)))
+  (setf (explosion-b e) (- (explosion-b e) (explosion-fade-rate e)))
+
+  (if (< (explosion-r e) 0)
+      (setf (explosion-r e) 0))
+  (if (< (explosion-g e) 0)
+      (setf (explosion-g e) 0))
+  (if (< (explosion-b e) 0)
+      (setf (explosion-b e) 0))
+
+  (if (and (zerop (explosion-r e)) (zerop (explosion-g e)) (zerop (explosion-b e)))
+      (setf *explosions* (remove e *explosions*))
+      (progn (setf (explosion-x e) (+ (explosion-x e) (explosion-vx e)))
+	     (setf (explosion-y e) (- (explosion-y e) (explosion-vy e))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;; PLAYER ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -791,6 +862,7 @@
 
 (defun player-destroyed ()
   (setf *player-lives* (decf *player-lives*))
+  (create-explosion (player-x *player*) (player-y *player*) t)
   (create-player)
   (setf *player-shield* t)
   (setf *player-shield-timer* 120)
@@ -926,6 +998,7 @@
     (ship-collide-enemy)
     (update-laser)
     (update-enemy-laser)
+    (update-explosions)
     (check-asteroid-start-time)
     (check-enemy-start-time)
     (end-of-wave-p)
@@ -933,6 +1006,7 @@
     )
 
   (display-level)
+  (draw-explosions)
   (draw-player)
   (draw-asteroids)
   (draw-enemies)
@@ -989,6 +1063,7 @@
   (create-player)
   (setf *enemy* nil)
   (setf *asteroids* nil)
+  (setf *explosions* nil)
   (setf *player-laser* nil)
   (setf *enemy-laser* nil)
   (setf *pause* nil)
@@ -1104,6 +1179,8 @@
 					 (fire-laser)))
 			 (:sdl-key-up (if (and (= *game-state* 1) (eql *pause* nil))
 					  (play-sound-thrust)))
+			 (:sdl-key-a (if (= *game-state* 1)
+					 (create-explosion 300 300)))
 			 (:sdl-key-p (if (= *game-state* 1)
 					 (pause-game)))
 			 (:sdl-key-q (if (= *game-state* 1)
