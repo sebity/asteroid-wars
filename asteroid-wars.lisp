@@ -824,7 +824,7 @@
 
 (defun display-level ()
   (draw-text (format nil "Lives: ~a" *player-lives*) 10 10 255 255 255)
-  (draw-text (format nil "Wave: ~a" *wave*) 400 10 255 255 255)
+  (draw-text (format nil "Wave: ~a" *wave*) 480 10 255 255 255)
   (draw-text (format nil "Score: ~a" *player-score*) 900 10 255 255 255))
 
 
@@ -833,7 +833,7 @@
 (defun draw-game-ui ()
   (if (eql *pause* t)
       (draw-text "Paused" 
-	     380 280 255 255 255 *ttf-font-large*)))
+	     475 320 255 255 0 *ttf-font-large*)))
 
 (defun update-score-kill (type size)
   (cond ((equalp type 'asteroid) 
@@ -860,6 +860,7 @@
 				     (* 1000 *wave*)
 				     (* 250 *player-lives* *wave*)))
 	     (setf *wave* (incf *wave*))
+	     (play-sound 8)
 	     (new-wave))))
 
 
@@ -867,7 +868,8 @@
 
 (defun game-over-p ()
   (if (zerop *player-lives*)
-      (change-game-state)))
+      (progn (stop-sound-thrust)
+	     (change-game-state))))
 
 
 ;;;; NEW-WAVE function
@@ -1009,7 +1011,7 @@
 ;;;; SETUP-AUDIO function
 
 (defun setup-audio ()
-  (setf *soundfx* (make-array 8))
+  (setf *soundfx* (make-array 9))
   (sdl-mixer:init-mixer :mp3)
   (setf *mixer-opened* (sdl-mixer:OPEN-AUDIO :chunksize 1024 :enable-callbacks nil))
   (when *mixer-opened*
@@ -1021,6 +1023,8 @@
     (setf (aref *soundfx* 5) (sdl-mixer:load-sample (sdl:create-path "shield-1.ogg" *audio-root*)))
     (setf (aref *soundfx* 6) (sdl-mixer:load-sample (sdl:create-path "player-explosion.ogg" *audio-root*)))
     (setf (aref *soundfx* 7) (sdl-mixer:load-sample (sdl:create-path "laser-2.ogg" *audio-root*)))
+    (setf (aref *soundfx* 8) (sdl-mixer:load-sample (sdl:create-path "level-up.ogg" *audio-root*)))
+
     (setf *sound-thrust* (sdl-mixer:load-music (sdl:create-path "thrust.ogg" *audio-root*)))
     (sample-finished-action)
     (sdl-mixer:allocate-channels 16)))
@@ -1096,14 +1100,14 @@
 		   t)
       (:key-down-event (:key key)
 		       (case key
-			 (:sdl-key-z (if (= *game-state* 1)
+			 (:sdl-key-z (if (and (= *game-state* 1) (eql *pause* nil))
 					 (fire-laser)))
+			 (:sdl-key-up (if (and (= *game-state* 1) (eql *pause* nil))
+					  (play-sound-thrust)))
 			 (:sdl-key-p (if (= *game-state* 1)
 					 (pause-game)))
 			 (:sdl-key-q (if (= *game-state* 1)
 					 (change-game-state)))
-			 (:sdl-key-up (if (= *game-state* 1)
-					  (play-sound-thrust)))
 			 (:sdl-key-space (continue-option))
 			 (:sdl-key-escape (sdl:push-quit-event))))
       (:key-up-event (:key key)
@@ -1112,8 +1116,9 @@
 					(stop-sound-thrust)))))
       (:idle ()
 	     (setf *thrust* nil)
-	     (when (sdl:get-key-state :sdl-key-left) (player-move 'left))
-	     (when (sdl:get-key-state :sdl-key-right) (player-move 'right))
-	     (when (sdl:get-key-state :sdl-key-up) (player-move 'forward))
+	     (unless (eql *pause* t)
+	       (when (sdl:get-key-state :sdl-key-left) (player-move 'left))
+	       (when (sdl:get-key-state :sdl-key-right) (player-move 'right))
+	       (when (sdl:get-key-state :sdl-key-up) (player-move 'forward)))
 	     ;(when (sdl:get-key-state :sdl-key-down) (player-move 'back))
 	     (render)))))
