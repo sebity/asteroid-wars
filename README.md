@@ -20,3 +20,5 @@ Thrust       : `Up` arrows key.
 Rotate Left  : `Left` arrows key.
 
 Rotate Right : `Right` arrows key.
+
+Fire         : `Z` key.
