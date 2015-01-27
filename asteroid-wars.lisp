@@ -217,13 +217,13 @@
 ;;;; SHIP-COLLIDE-ASTEROID-P function
 
 (defun ship-collide-asteroid-p (a p)
-  (if (<= (sqrt (+ (square (- (asteroid-x a) (player-x p)))
-		   (square (- (asteroid-y a) (player-y p)))))
-	  (+ (asteroid-field-size (asteroid-stage a)) 10))
-      (progn (split-asteroid a)
-	     (unless (eq *player-shield* t)
-	       (player-destroyed)
-	       (play-sound 6)))))
+  (when (<= (sqrt (+ (square (- (asteroid-x a) (player-x p)))
+		     (square (- (asteroid-y a) (player-y p)))))
+	    (+ (asteroid-field-size (asteroid-stage a)) 10))
+    (split-asteroid a)
+    (unless (eq *player-shield* t)
+      (player-destroyed)
+      (play-sound 6))))
 
 
 ;;;; SHIP-COLLIDE-ENEMY function
@@ -237,54 +237,54 @@
 ;;;; SHIP-COLLIDE-ENEMY-P function
 
 (defun ship-collide-enemy-p (e p)
-  (if (<= (sqrt (+ (square (- (enemy-x e) (player-x p)))
-		   (square (- (enemy-y e) (player-y p)))))
-	  (+ (enemy-field-size (enemy-ship-type e)) 10))
-      (progn (create-explosion (enemy-x e) (enemy-y e) t)
-	     (setf *enemy* (remove e *enemy*))
-	     (unless (eq *player-shield* t)
-	       (player-destroyed)
-	       (play-sound 6)))))
+  (when (<= (sqrt (+ (square (- (enemy-x e) (player-x p)))
+		     (square (- (enemy-y e) (player-y p)))))
+	    (+ (enemy-field-size (enemy-ship-type e)) 10))
+    (create-explosion (enemy-x e) (enemy-y e) t)
+    (setf *enemy* (remove e *enemy*))
+    (unless (eq *player-shield* t)
+      (player-destroyed)
+      (play-sound 6))))
 
 
 ;;;; LASER-COLLIDE-ASTEROID function
 
 (defun laser-collide-asteroid (l)
   (loop for a in *asteroids*
-     do (if (<= (sqrt (+ (square (- (asteroid-x a) (player-laser-x l)))
-			 (square (- (asteroid-y a) (player-laser-y l)))))
-		(asteroid-field-size (asteroid-stage a)))
-	    (progn (split-asteroid a)
-		   (setf *player-laser* (remove l *player-laser*))
-		   (update-score-kill 'asteroid (asteroid-stage a))
-		   (play-sound (+ (random 4) 1))))))
+     do (when (<= (sqrt (+ (square (- (asteroid-x a) (player-laser-x l)))
+			   (square (- (asteroid-y a) (player-laser-y l)))))
+		  (asteroid-field-size (asteroid-stage a)))
+	  (split-asteroid a)
+	  (setf *player-laser* (remove l *player-laser*))
+	  (update-score-kill 'asteroid (asteroid-stage a))
+	  (play-sound (+ (random 4) 1)))))
 
 
 ;;;; LASER-COLLIDE-ASTEROID function
 
 (defun laser-collide-enemy (l)
   (loop for e in *enemy*
-     do (if (<= (sqrt (+ (square (- (enemy-x e) (player-laser-x l)))
-			 (square (- (enemy-y e) (player-laser-y l)))))
-		(enemy-field-size (enemy-ship-type e)))
-	    (progn (create-explosion (enemy-x e) (enemy-y e) t)
-		   (setf *enemy* (remove e *enemy*))
-		   (setf *player-laser* (remove l *player-laser*))
-		   (update-score-kill 'enemy (enemy-ship-type e))
-		   (play-sound (+ (random 4) 1))))))
+     do (when (<= (sqrt (+ (square (- (enemy-x e) (player-laser-x l)))
+			   (square (- (enemy-y e) (player-laser-y l)))))
+		  (enemy-field-size (enemy-ship-type e)))
+	  (create-explosion (enemy-x e) (enemy-y e) t)
+	  (setf *enemy* (remove e *enemy*))
+	  (setf *player-laser* (remove l *player-laser*))
+	  (update-score-kill 'enemy (enemy-ship-type e))
+	  (play-sound (+ (random 4) 1)))))
 
 
 ;;;; ENEMY-LASER-COLLIDE-PLAYER function
 
 (defun enemy-laser-collide-player (l)
   (let ((p *player*))
-    (if (<= (sqrt (+ (square (- (enemy-laser-x l) (player-x p)))
-		     (square (- (enemy-laser-y l) (player-y p)))))
-	    20)
-	(progn (setf *enemy-laser* (remove l *enemy-laser*))
-	       (unless (eq *player-shield* t)
-		 (player-destroyed)
-		 (play-sound 6))))))
+    (when (<= (sqrt (+ (square (- (enemy-laser-x l) (player-x p)))
+		       (square (- (enemy-laser-y l) (player-y p)))))
+	      20)
+      (setf *enemy-laser* (remove l *enemy-laser*))
+      (unless (eq *player-shield* t)
+	(player-destroyed)
+	(play-sound 6)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;; PRIMITIVES ;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -368,9 +368,9 @@
 
 (defun check-enemy-start-time ()
   (dolist (e *enemy-schedule*)
-    (if (<= e *game-tick*)
-	(progn (create-enemy)
-	       (setf *enemy-schedule* (remove e *enemy-schedule*))))))
+    (when (<= e *game-tick*)
+      (create-enemy)
+      (setf *enemy-schedule* (remove e *enemy-schedule*)))))
 
 
 ;;;; CREATE-ENEMY function
@@ -469,7 +469,7 @@
 
 (defun draw-enemies ()
     (loop for e in *enemy*
-       do (progn (draw-enemy-ship e))))
+       do (draw-enemy-ship e)))
 
 
 ;;;; DRAW-ENEMY-SHIP function
@@ -556,9 +556,9 @@
 
 (defun check-asteroid-start-time ()
   (dolist (a *asteroid-schedule*)
-    (if (<= a *game-tick*)
-	(progn (create-asteroid)
-	       (setf *asteroid-schedule* (remove a *asteroid-schedule*))))))
+    (when (<= a *game-tick*)
+      (create-asteroid)
+      (setf *asteroid-schedule* (remove a *asteroid-schedule*)))))
 
 
 ;;;; CREATE-ASTEROID function
@@ -592,9 +592,9 @@
 ;;;; SPLIT-ASTEROID function
 
 (defun split-asteroid (a)
-  (if (< (asteroid-stage a) 3)
-      (progn (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a))
-	     (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a))))
+  (when (< (asteroid-stage a) 3)
+    (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a))
+    (create-asteroid (+ (asteroid-stage a) 1) (asteroid-x a) (asteroid-y a)))
   (create-explosion (asteroid-x a) (asteroid-y a))
   (setf *asteroids* (remove a *asteroids*)))
 
@@ -655,7 +655,7 @@
 ;;;; CREATE-EXPLOSION function
 
 (defun create-explosion (x y &optional (rand-p nil))
-  (dotimes (n 10)
+  (dotimes (n 30)
     (let* ((vec-x (sin (deg-to-rad (random 360))))
 	   (vec-y (cos (deg-to-rad (random 360))))
 	   (vx (* 3 vec-x))
@@ -663,10 +663,10 @@
       (if (eq rand-p t)
 	  (push (make-explosion :x x :y y :vx vx :vy vy
 				:r (random 255) :g (random 255) :b (random 255)
-				:fade-rate (+ (random 5) 5)) *explosions*)
+				:fade-rate (+ (random 3) 5)) *explosions*)
 	  (push (make-explosion :x x :y y :vx vx :vy vy
 				:r 255 :g 255 :b 255
-				:fade-rate (+ (random 5) 5)) *explosions*)))))
+				:fade-rate (+ (random 4) 5)) *explosions*)))))
 
 
 ;;;; DRAW-EXPLOSIONS function
