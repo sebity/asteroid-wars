@@ -157,20 +157,20 @@
 
 ;;;; CONTINUABLE macro
 
-(defmacro continuable (&body body)
-  `(restart-case
-       (progn ,@body)
-     (continue () :report "Continue")))
+;(defmacro continuable (&body body)
+;  `(restart-case
+;       (progn ,@body)
+;     (continue () :report "Continue")))
 
 
 ;;;; UPDATE-SWANK function
 
-(defun update-swank ()
-  (continuable
-   (let ((connection (or swank::*emacs-connection*
-			 (swank::default-connection))))
-     (when connection
-       (swank::handle-requests connection t)))))
+;(defun update-swank ()
+;  (continuable
+;   (let ((connection (or swank::*emacs-connection*
+;			 (swank::default-connection))))
+;     (when connection
+;       (swank::handle-requests connection t)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;; MATHS ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1044,7 +1044,7 @@
 ;;;; RENDER function
 
 (defun render ()
-  (update-swank)
+;  (update-swank)
   (sdl:clear-display sdl:*black*)
 
   (cond ((= *game-state* 1) (state-in-play))
